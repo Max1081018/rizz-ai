@@ -10,6 +10,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout Repository
@@ -28,8 +30,44 @@ jobs:
       - name: Build Debug APK with Gradle Wrapper
         run: ./gradlew assembleDebug --stacktrace
 
+      - name: Rename APK
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/Rizz-AI-v1.0.2.apk
+
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: rizz-ai-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: app/build/outputs/apk/debug/Rizz-AI-v1.0.2.apk
+
+      - name: Create GitHub Release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.2-${{ github.run_number }}
+          name: "Rizz AI v1.0.2 (Build #${{ github.run_number }})"
+          body: |
+            ## ⚡ Rizz AI v1.0.2
+
+            **Your AI-powered dating wingman.**
+
+            ### What's New
+            - 🧠 Autonomous mood & personality detection
+            - 🔄 Dynamic Gemini model discovery & fallback
+            - 📱 Floating overlay HUD with 3 calibrated reply styles
+            - 📋 One-tap copy to clipboard with haptic feedback
+            - 🎯 Auto-scan on Tinder, Bumble, Hinge, WhatsApp, IG, Telegram
+
+            ### Install
+            1. Download `Rizz-AI-v1.0.2.apk` below
+            2. Enable "Install from unknown sources" on your Android device
+            3. Open the APK and install
+            4. Get your free Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey)
+            5. Grant overlay + accessibility permissions
+            6. Hit **Launch Wingman** and switch to any dating app 🔥
+
+            ---
+            *Built from `${{ github.ref_name }}` @ `${{ github.sha }}`*
+          files: app/build/outputs/apk/debug/Rizz-AI-v1.0.2.apk
+          draft: false
+          prerelease: false
