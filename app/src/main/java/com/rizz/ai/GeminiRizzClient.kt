@@ -24,8 +24,19 @@ class GeminiRizzClient(private val apiKey: String) {
 
     companion object {
         private const val TAG = "GeminiRizzClient"
-        private const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
+
+        // Globally supported models with fallback hierarchy
+        private val CANDIDATE_MODELS = listOf(
+            "gemini-1.5-flash",
+            "gemini-1.5-flash-latest",
+            "gemini-2.0-flash-exp",
+            "gemini-2.5-flash",
+            "gemini-1.5-pro"
+        )
+
+        @Volatile
+        private var lastWorkingModel: String? = null
     }
 
     private val httpClient = OkHttpClient.Builder()
@@ -65,35 +76,54 @@ class GeminiRizzClient(private val apiKey: String) {
             )
 
             val jsonBody = gson.toJson(requestPayload)
-            val url = "$BASE_URL?key=$apiKey"
 
-            val httpRequest = Request.Builder()
-                .url(url)
-                .post(jsonBody.toRequestBody(JSON_MEDIA_TYPE))
-                .header("Content-Type", "application/json")
-                .build()
-
-            val response = httpClient.newCall(httpRequest).execute()
-            val responseBody = response.body?.string()
-
-            if (!response.isSuccessful || responseBody == null) {
-                val errorCode = response.code
-                Log.e(TAG, "API request failed with code $errorCode: $responseBody")
-                return@withContext Result.failure(Exception("Gemini API error ($errorCode): ${responseBody ?: "Unknown error"}"))
+            val modelsToTry = if (lastWorkingModel != null) {
+                listOf(lastWorkingModel!!) + (CANDIDATE_MODELS - lastWorkingModel!!)
+            } else {
+                CANDIDATE_MODELS
             }
 
-            val geminiResponse = gson.fromJson(responseBody, GeminiResponse::class.java)
-            val rawText = geminiResponse.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+            var lastError: Exception? = null
 
-            if (rawText.isNullOrBlank()) {
-                return@withContext Result.failure(Exception("Empty response from AI Wingman."))
+            for (model in modelsToTry) {
+                val url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey"
+
+                val httpRequest = Request.Builder()
+                    .url(url)
+                    .post(jsonBody.toRequestBody(JSON_MEDIA_TYPE))
+                    .header("Content-Type", "application/json")
+                    .build()
+
+                try {
+                    val response = httpClient.newCall(httpRequest).execute()
+                    val responseBody = response.body?.string()
+
+                    if (response.isSuccessful && !responseBody.isNullOrBlank()) {
+                        val geminiResponse = gson.fromJson(responseBody, GeminiResponse::class.java)
+                        val rawText = geminiResponse.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+
+                        if (!rawText.isNullOrBlank()) {
+                            val cleanJson = cleanJsonResponse(rawText)
+                            val rizzResult = gson.fromJson(cleanJson, RizzResult::class.java)
+                            lastWorkingModel = model
+                            Log.d(TAG, "Successfully analyzed with model: $model")
+                            return@withContext Result.success(rizzResult)
+                        }
+                    } else if (response.code == 404) {
+                        Log.w(TAG, "Model $model returned 404, trying next candidate model...")
+                        lastError = Exception("Model $model returned 404 Not Found")
+                        continue
+                    } else {
+                        Log.e(TAG, "Model $model failed with code ${response.code}: $responseBody")
+                        lastError = Exception("Gemini API error (${response.code}): ${responseBody ?: "Unknown error"}")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error connecting with model $model", e)
+                    lastError = e
+                }
             }
 
-            // Parse structured JSON
-            val cleanJson = cleanJsonResponse(rawText)
-            val rizzResult = gson.fromJson(cleanJson, RizzResult::class.java)
-
-            Result.success(rizzResult)
+            Result.failure(lastError ?: Exception("Unable to get response from Gemini API."))
         } catch (e: Exception) {
             Log.e(TAG, "Failed to analyze chat screen", e)
             Result.failure(e)
@@ -101,7 +131,6 @@ class GeminiRizzClient(private val apiKey: String) {
     }
 
     private fun encodeBitmapToBase64(bitmap: Bitmap): String {
-        // Scale down if image is too large to maintain fast upload
         val maxDimension = 1280
         val width = bitmap.width
         val height = bitmap.height
