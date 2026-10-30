@@ -91,15 +91,42 @@
                         android:textSize="14sp" />
                 </com.google.android.material.textfield.TextInputLayout>
 
-                <Button
-                    android:id="@+id/btnSaveApiKey"
-                    style="@style/Widget.Material3.Button.TonalButton"
-                    android:layout_width="wrap_content"
+                <!-- Status indicator -->
+                <TextView
+                    android:id="@+id/txtKeyStatus"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_gravity="end"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/key_status_none"
+                    android:textColor="@color/text_muted"
+                    android:textSize="12sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
-                    android:text="@string/btn_save_key"
-                    android:textColor="@color/text_primary" />
+                    android:gravity="end"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/btnTestApiKey"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="8dp"
+                        android:text="@string/btn_test_key"
+                        android:textSize="12sp" />
+
+                    <Button
+                        android:id="@+id/btnSaveApiKey"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/btn_save_key"
+                        android:textColor="@color/text_primary"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
@@ -207,7 +234,7 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- 3. Persona / Vibe Card -->
+        <!-- 3. Autonomous Mood & Persona Card -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -226,22 +253,38 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="3. WINGMAN PERSONA"
+                    android:text="3. AUTONOMOUS MOOD &amp; PERSONALITY ENGINE"
                     android:textColor="@color/secondary"
                     android:textSize="12sp"
                     android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="AI autonomously diagnoses her archetype, subtext &amp; energy to generate tailored moves."
+                    android:textColor="@color/text_muted"
+                    android:textSize="12sp" />
 
                 <RadioGroup
                     android:id="@+id/rgVibe"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp">
+                    android:layout_marginTop="10dp">
+
+                    <RadioButton
+                        android:id="@+id/rbAuto"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:checked="true"
+                        android:text="@string/vibe_auto"
+                        android:textColor="@color/primary"
+                        android:textStyle="bold" />
 
                     <RadioButton
                         android:id="@+id/rbSmooth"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:checked="true"
                         android:text="@string/vibe_smooth"
                         android:textColor="@color/text_primary" />
 

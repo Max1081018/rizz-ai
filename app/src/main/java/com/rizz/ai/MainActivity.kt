@@ -10,17 +10,26 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.rizz.ai.databinding.ActivityMainBinding
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var prefs: PreferencesManager
     private lateinit var mediaProjectionManager: MediaProjectionManager
+
+    private val activityScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private val mediaProjectionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -63,6 +72,12 @@ class MainActivity : AppCompatActivity() {
         val currentKey = prefs.geminiApiKey
         if (currentKey.isNotBlank()) {
             binding.etApiKey.setText(currentKey)
+            if (prefs.cachedModel.isNotBlank()) {
+                binding.txtKeyStatus.text = "✅ Connected to: ${prefs.cachedModel}"
+                binding.txtKeyStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_green))
+            } else {
+                testKeyConnection(currentKey, silent = true)
+            }
         }
 
         binding.btnSaveApiKey.setOnClickListener {
@@ -71,7 +86,44 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "Please enter a valid Gemini API key", Toast.LENGTH_SHORT).show()
             } else {
                 prefs.geminiApiKey = key
-                Toast.makeText(this, "Gemini API key saved securely!", Toast.LENGTH_SHORT).show()
+                testKeyConnection(key, silent = false)
+            }
+        }
+
+        binding.btnTestApiKey.setOnClickListener {
+            val key = binding.etApiKey.text?.toString()?.trim() ?: ""
+            if (key.isBlank()) {
+                Toast.makeText(this, "Please enter your Gemini API key first", Toast.LENGTH_SHORT).show()
+            } else {
+                prefs.geminiApiKey = key
+                testKeyConnection(key, silent = false)
+            }
+        }
+    }
+
+    private fun testKeyConnection(key: String, silent: Boolean) {
+        binding.txtKeyStatus.text = getString(R.string.key_status_testing)
+        binding.txtKeyStatus.setTextColor(ContextCompat.getColor(this, R.color.text_muted))
+
+        activityScope.launch {
+            val client = GeminiRizzClient(key)
+            val result = client.discoverActiveModel()
+
+            if (result.isSuccess) {
+                val modelName = result.getOrNull() ?: "Gemini Flash"
+                prefs.cachedModel = modelName
+                binding.txtKeyStatus.text = "✅ Connected! Active model: $modelName"
+                binding.txtKeyStatus.setTextColor(ContextCompat.getColor(this@MainActivity, R.color.accent_green))
+                if (!silent) {
+                    Toast.makeText(this@MainActivity, "Connected to $modelName!", Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                val errorMsg = result.exceptionOrNull()?.message ?: "Unknown connection error"
+                binding.txtKeyStatus.text = "❌ $errorMsg"
+                binding.txtKeyStatus.setTextColor(ContextCompat.getColor(this@MainActivity, R.color.primary))
+                if (!silent) {
+                    Toast.makeText(this@MainActivity, errorMsg, Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
@@ -107,18 +159,20 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupVibeSection() {
         when (prefs.vibeMode) {
+            PreferencesManager.VIBE_SMOOTH -> binding.rbSmooth.isChecked = true
             PreferencesManager.VIBE_TEASE -> binding.rbTease.isChecked = true
             PreferencesManager.VIBE_CHILL -> binding.rbChill.isChecked = true
             PreferencesManager.VIBE_BOLD -> binding.rbBold.isChecked = true
-            else -> binding.rbSmooth.isChecked = true
+            else -> binding.rbAuto.isChecked = true
         }
 
         binding.rgVibe.setOnCheckedChangeListener { _, checkedId ->
             val vibe = when (checkedId) {
+                R.id.rbSmooth -> PreferencesManager.VIBE_SMOOTH
                 R.id.rbTease -> PreferencesManager.VIBE_TEASE
                 R.id.rbChill -> PreferencesManager.VIBE_CHILL
                 R.id.rbBold -> PreferencesManager.VIBE_BOLD
-                else -> PreferencesManager.VIBE_SMOOTH
+                else -> PreferencesManager.VIBE_AUTO
             }
             prefs.vibeMode = vibe
         }
@@ -156,14 +210,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startWingmanServices(resultCode: Int, data: Intent) {
-        // Start ScreenCaptureService
         val captureIntent = Intent(this, ScreenCaptureService::class.java).apply {
             putExtra(ScreenCaptureService.EXTRA_RESULT_CODE, resultCode)
             putExtra(ScreenCaptureService.EXTRA_RESULT_DATA, data)
         }
         ContextCompat.startForegroundService(this, captureIntent)
 
-        // Start FloatingRizzService
         val overlayIntent = Intent(this, FloatingRizzService::class.java).apply {
             action = FloatingRizzService.ACTION_START
         }
@@ -172,7 +224,6 @@ class MainActivity : AppCompatActivity() {
         updateWingmanButtonState()
         Toast.makeText(this, "Rizz AI Wingman active! Switch to any chat app.", Toast.LENGTH_SHORT).show()
 
-        // Send app to background so user is ready to chat immediately
         moveTaskToBack(true)
     }
 
@@ -203,5 +254,10 @@ class MainActivity : AppCompatActivity() {
                 notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
+    }
+
+    override fun onDestroy() {
+        activityScope.cancel()
+        super.onDestroy()
     }
 }

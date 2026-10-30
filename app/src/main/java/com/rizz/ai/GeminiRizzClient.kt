@@ -6,6 +6,7 @@ import android.util.Log
 import com.google.gson.Gson
 import com.rizz.ai.model.GeminiContent
 import com.rizz.ai.model.GeminiGenerationConfig
+import com.rizz.ai.model.GeminiModelListResponse
 import com.rizz.ai.model.GeminiPart
 import com.rizz.ai.model.GeminiRequest
 import com.rizz.ai.model.GeminiResponse
@@ -26,38 +27,96 @@ class GeminiRizzClient(private val apiKey: String) {
         private const val TAG = "GeminiRizzClient"
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 
-        // Globally supported models with fallback hierarchy
-        private val CANDIDATE_MODELS = listOf(
-            "gemini-1.5-flash",
-            "gemini-1.5-flash-latest",
-            "gemini-2.0-flash-exp",
+        // Modern 2026 model candidates with fallback priority
+        private val FALLBACK_MODELS = listOf(
             "gemini-2.5-flash",
-            "gemini-1.5-pro"
+            "gemini-3.8-flash",
+            "gemini-2.5-flash-lite",
+            "gemini-3.6-flash",
+            "gemini-2.0-flash",
+            "gemini-2.5-pro"
         )
 
         @Volatile
-        private var lastWorkingModel: String? = null
+        var activeModel: String? = null
+            private set
     }
 
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(25, TimeUnit.SECONDS)
-        .writeTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(25, TimeUnit.SECONDS)
         .build()
 
     private val gson = Gson()
 
-    suspend fun analyzeChatScreen(
-        bitmap: Bitmap,
-        preferredVibe: String = PreferencesManager.VIBE_SMOOTH
-    ): Result<RizzResult> = withContext(Dispatchers.IO) {
+    /**
+     * Queries Google's Generative Language API dynamically to find which models
+     * are active and permitted for this specific API key.
+     */
+    suspend fun discoverActiveModel(): Result<String> = withContext(Dispatchers.IO) {
+        if (apiKey.isBlank()) {
+            return@withContext Result.failure(IllegalArgumentException("Gemini API key is blank."))
+        }
+
+        try {
+            val listUrl = "https://generativelanguage.googleapis.com/v1beta/models?key=$apiKey"
+            val request = Request.Builder()
+                .url(listUrl)
+                .get()
+                .build()
+
+            val response = httpClient.newCall(request).execute()
+            val body = response.body?.string()
+
+            if (!response.isSuccessful || body.isNullOrBlank()) {
+                val code = response.code
+                Log.e(TAG, "Failed to list models (HTTP $code): $body")
+                return@withContext Result.failure(
+                    Exception(parseGoogleErrorMessage(code, body))
+                )
+            }
+
+            val listResponse = gson.fromJson(body, GeminiModelListResponse::class.java)
+            val models = listResponse.models?.filter { model ->
+                model.supportedGenerationMethods?.contains("generateContent") == true
+            }?.map { it.name.removePrefix("models/") } ?: emptyList()
+
+            if (models.isEmpty()) {
+                Log.w(TAG, "No models with generateContent found for key. Using fallback.")
+                return@withContext Result.failure(Exception("No models with generateContent permission found for this key."))
+            }
+
+            // Prioritize Flash models for speed and vision multimodal capability
+            val chosen = models.firstOrNull { it.contains("flash", ignoreCase = true) }
+                ?: models.firstOrNull { it.contains("gemini", ignoreCase = true) }
+                ?: models.first()
+
+            activeModel = chosen
+            Log.i(TAG, "Discovered active model for key: $chosen (available: $models)")
+            Result.success(chosen)
+        } catch (e: Exception) {
+            Log.w(TAG, "Exception during model discovery", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun analyzeChatScreen(bitmap: Bitmap): Result<RizzResult> = withContext(Dispatchers.IO) {
         try {
             if (apiKey.isBlank()) {
                 return@withContext Result.failure(IllegalStateException("Gemini API key is not set. Please configure it in the app."))
             }
 
+            // 1. If we don't have an active model yet, attempt dynamic discovery
+            if (activeModel == null) {
+                val discovery = discoverActiveModel()
+                if (discovery.isSuccess) {
+                    activeModel = discovery.getOrNull()
+                }
+            }
+
             val base64Image = encodeBitmapToBase64(bitmap)
-            val prompt = buildPsychologyPrompt(preferredVibe)
+            val prompt = buildAutonomousPsychologyPrompt()
 
             val requestPayload = GeminiRequest(
                 contents = listOf(
@@ -77,17 +136,21 @@ class GeminiRizzClient(private val apiKey: String) {
 
             val jsonBody = gson.toJson(requestPayload)
 
-            val modelsToTry = if (lastWorkingModel != null) {
-                listOf(lastWorkingModel!!) + (CANDIDATE_MODELS - lastWorkingModel!!)
-            } else {
-                CANDIDATE_MODELS
+            // Prepare list of models to try
+            val modelsToTry = mutableListOf<String>()
+            if (activeModel != null) {
+                modelsToTry.add(activeModel!!)
+            }
+            for (fallback in FALLBACK_MODELS) {
+                if (!modelsToTry.contains(fallback)) {
+                    modelsToTry.add(fallback)
+                }
             }
 
             var lastError: Exception? = null
 
             for (model in modelsToTry) {
                 val url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey"
-
                 val httpRequest = Request.Builder()
                     .url(url)
                     .post(jsonBody.toRequestBody(JSON_MEDIA_TYPE))
@@ -105,20 +168,21 @@ class GeminiRizzClient(private val apiKey: String) {
                         if (!rawText.isNullOrBlank()) {
                             val cleanJson = cleanJsonResponse(rawText)
                             val rizzResult = gson.fromJson(cleanJson, RizzResult::class.java)
-                            lastWorkingModel = model
+                            activeModel = model
                             Log.d(TAG, "Successfully analyzed with model: $model")
                             return@withContext Result.success(rizzResult)
                         }
                     } else if (response.code == 404) {
-                        Log.w(TAG, "Model $model returned 404, trying next candidate model...")
-                        lastError = Exception("Model $model returned 404 Not Found")
+                        Log.w(TAG, "Model '$model' returned 404, attempting next model...")
+                        lastError = Exception("Model '$model' not found (404)")
                         continue
                     } else {
-                        Log.e(TAG, "Model $model failed with code ${response.code}: $responseBody")
-                        lastError = Exception("Gemini API error (${response.code}): ${responseBody ?: "Unknown error"}")
+                        val errorDetail = parseGoogleErrorMessage(response.code, responseBody)
+                        Log.e(TAG, "Model '$model' failed (${response.code}): $errorDetail")
+                        lastError = Exception(errorDetail)
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Error connecting with model $model", e)
+                    Log.e(TAG, "Error connecting to model '$model'", e)
                     lastError = e
                 }
             }
@@ -127,6 +191,22 @@ class GeminiRizzClient(private val apiKey: String) {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to analyze chat screen", e)
             Result.failure(e)
+        }
+    }
+
+    private fun parseGoogleErrorMessage(code: Int, body: String?): String {
+        if (body.isNullOrBlank()) return "Google API error (HTTP $code)"
+        return try {
+            val json = gson.fromJson(body, com.google.gson.JsonObject::class.java)
+            val errorObj = json.getAsJsonObject("error")
+            val message = errorObj?.get("message")?.asString
+            if (!message.isNullOrBlank()) {
+                "Google API ($code): $message"
+            } else {
+                "Google API ($code): $body"
+            }
+        } catch (e: Exception) {
+            "Google API ($code): $body"
         }
     }
 
@@ -169,51 +249,50 @@ class GeminiRizzClient(private val apiKey: String) {
         return clean.trim()
     }
 
-    private fun buildPsychologyPrompt(preferredVibe: String): String {
-        val personaGuidance = when (preferredVibe) {
-            PreferencesManager.VIBE_TEASE -> "Prioritize playful teasing, witty banter, dry humor, and keeping them on their toes without being rude."
-            PreferencesManager.VIBE_CHILL -> "Prioritize relaxed, effortless charisma, low-pressure curiosity, emotional maturity, and warm intelligence."
-            PreferencesManager.VIBE_BOLD -> "Prioritize direct, confident interest, high flirtation, bold charm, and clear intent without coming off aggressive."
-            else -> "Prioritize smooth charm, romantic tension, clever wit, and confident intrigue."
-        }
-
+    private fun buildAutonomousPsychologyPrompt(): String {
         return """
-You are the world's highest EQ dating coach and real-time texting wingman.
-Analyze the provided screenshot of a messaging or dating chat (e.g., Tinder, Hinge, Bumble, Instagram, WhatsApp, iMessage).
+You are the world's most elite dating coach, behavioral psychologist, and real-time texting wingman.
+Autonomously diagnose the girl's psychology, personality archetype, mood, and hidden subtext from the provided chat screenshot, and craft replies that give the user maximum charisma and frame control.
 
-1. DEEP PSYCHOLOGICAL SUBTEXT ANALYSIS:
-- Differentiate between the user's messages and the other person's messages (note chat bubble placement and colors).
-- Determine what the other person is actually communicating under the surface (interest level, testing/shit-test, sarcasm, hesitation, playing hard to get, genuine engagement, boredom).
-- Provide a concise 1-2 sentence read of their mindset and tactical advice.
+STEP 1: AUTONOMOUS MOOD & PSYCHOLOGICAL DIAGNOSIS
+Examine the incoming messages (text, emojis, punctuation, latency/style, conversational investment):
+1. Detect Her Personality Archetype:
+   - e.g. "Feisty Challenger / Banterer", "High-Value / Guarded", "Dry Sarcastic / Skeptical", "Warm & Curious / Receptive", "Low Investment / Distant", "Bored by Small Talk"
+2. Detect Her Immediate Mood & Hidden Subtext:
+   - What is she ACTUALLY doing? (e.g. Shit-testing his confidence, waiting for him to lead, teasing, fishing for validation, being aloof to protect herself)
+3. Formulate the Counter-Tactic:
+   - The exact psychological strategy needed right now (e.g. "Stay unbothered, mock-disapprove playfully, reframe yourself as the prize").
 
-2. GENERATE 3 CALIBRATED HUMAN REPLIES:
-All replies MUST sound like a genuine, high-charm human texting on their phone.
-CRITICAL TEXTING RULES:
-- Never sound like an AI or generic pickup artist.
-- Never use cheesy cliches or unnatural formal punctuation (avoid ending single casual lines with periods).
-- Match modern texting capitalization and cadence (casual lowercase where appropriate).
-- Preferred Persona: $personaGuidance
+STEP 2: GENERATE 3 CALIBRATED HUMAN TEXTS
+Generate 3 distinct conversational weapons, customized to HER detected mood:
+- Line 1: 🔥 SMOOTH & FLIRTY — Calibrated attraction and sexual tension matched to her receptivity without being needy.
+- Line 2: 😏 WITTY PLAYFUL COUNTER — Teasing banter, mock pushback, or calling her bluff with playful confidence.
+- Line 3: 🎯 HIGH-EQ LEADER / CLOSER — Confident forward movement that transitions the topic effortlessly or sets up an easy low-pressure date.
+
+TEXTING RULES:
+- Sound 100% human. Match real texting habits (casual lowercase where natural, NO robotic punctuation, NO cheesy pickup artist lines).
+- Match or slightly outframe her energy level.
 
 Return STRICT JSON matching this schema:
 {
-  "psychologyInsight": "1-2 sentence punchy read of the other person's intent, subtext, and how to handle it.",
-  "detectedVibe": "e.g., Playful Bantering, Shit-test / teasing, Warm & engaged, Dry aloofness",
-  "conversationalFrame": "e.g., High tension banter, Getting to know, Date closing",
+  "psychologyInsight": "1-2 sentence breakdown of her hidden subtext and the tactical move.",
+  "detectedVibe": "Her Personality Archetype & Mood (e.g. 'Playful Challenger • Testing your confidence')",
+  "conversationalFrame": "Current dynamic (e.g. 'Tension Banter • High Interest')",
   "suggestions": [
     {
       "category": "SMOOTH_FLIRTY",
-      "tag": "🔥 SMOOTH / FLIRTY",
-      "text": "Smooth, charismatic line creating attraction."
+      "tag": "🔥 SMOOTH & FLIRTY",
+      "text": "Charismatic flirty reply."
     },
     {
       "category": "PLAYFUL_TEASE",
-      "tag": "😏 PLAYFUL TEASE",
-      "text": "Witty banter, mock disapproval, or playful callback."
+      "tag": "😏 PLAYFUL COUNTER",
+      "text": "Witty bantering reply."
     },
     {
       "category": "HIGH_EQ_CLOSER",
-      "tag": "🎯 HIGH-EQ CLOSER",
-      "text": "Subtle direction toward exchanging numbers or making plans effortlessly."
+      "tag": "🎯 SMOOTH CLOSER",
+      "text": "High-EQ conversational lead or date close."
     }
   ]
 }

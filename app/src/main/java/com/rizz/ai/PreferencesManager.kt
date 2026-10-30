@@ -14,7 +14,9 @@ class PreferencesManager(context: Context) {
         private const val FALLBACK_PREFS_NAME = "rizz_ai_prefs"
         private const val KEY_GEMINI_API_KEY = "gemini_api_key"
         private const val KEY_VIBE_MODE = "vibe_mode"
+        private const val KEY_CACHED_MODEL = "cached_model"
 
+        const val VIBE_AUTO = "auto"
         const val VIBE_SMOOTH = "smooth"
         const val VIBE_TEASE = "tease"
         const val VIBE_CHILL = "chill"
@@ -40,8 +42,12 @@ class PreferencesManager(context: Context) {
         set(value) = prefs.edit().putString(KEY_GEMINI_API_KEY, value.trim()).apply()
 
     var vibeMode: String
-        get() = prefs.getString(KEY_VIBE_MODE, VIBE_SMOOTH) ?: VIBE_SMOOTH
+        get() = prefs.getString(KEY_VIBE_MODE, VIBE_AUTO) ?: VIBE_AUTO
         set(value) = prefs.edit().putString(KEY_VIBE_MODE, value).apply()
+
+    var cachedModel: String
+        get() = prefs.getString(KEY_CACHED_MODEL, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_CACHED_MODEL, value).apply()
 
     fun isConfigured(): Boolean {
         return geminiApiKey.isNotBlank()

@@ -40,7 +40,7 @@ data class GeminiRequest(
 
 data class GeminiGenerationConfig(
     @SerializedName("temperature")
-    val temperature: Float = 0.7f,
+    val temperature: Float = 0.75f,
     @SerializedName("topP")
     val topP: Float = 0.95f,
     @SerializedName("responseMimeType")
@@ -86,4 +86,17 @@ data class GeminiContentResponse(
 data class GeminiTextResponse(
     @SerializedName("text")
     val text: String?
+)
+
+// Gemini Models Listing Models
+data class GeminiModelListResponse(
+    @SerializedName("models")
+    val models: List<GeminiModelInfo>?
+)
+
+data class GeminiModelInfo(
+    @SerializedName("name")
+    val name: String, // e.g. "models/gemini-2.5-flash"
+    @SerializedName("supportedGenerationMethods")
+    val supportedGenerationMethods: List<String>?
 )

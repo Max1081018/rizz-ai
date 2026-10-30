@@ -385,10 +385,7 @@ class FloatingRizzService : Service() {
 
                     // Process with Gemini Vision
                     serviceScope.launch {
-                        val result = geminiClient?.analyzeChatScreen(
-                            bitmap = bitmap,
-                            preferredVibe = preferencesManager.vibeMode
-                        )
+                        val result = geminiClient?.analyzeChatScreen(bitmap = bitmap)
 
                         showLoading(false)
                         isScanning = false
@@ -418,7 +415,7 @@ class FloatingRizzService : Service() {
 
     private fun updateHudWithResult(result: RizzResult) {
         txtPsychologyInsight?.text = result.psychologyInsight
-        txtVibeHeading?.text = "PSYCHOLOGICAL READ • ${result.detectedVibe.uppercase()}"
+        txtVibeHeading?.text = "HER MOOD: ${result.detectedVibe.uppercase()}"
 
         val s1 = result.suggestions.getOrNull(0)
         if (s1 != null) {

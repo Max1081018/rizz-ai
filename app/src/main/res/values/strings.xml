@@ -18,18 +18,22 @@
     <string name="api_key_desc">Get your free key at aistudio.google.com</string>
     
     <string name="vibe_mode_title">Conversation Persona / Vibe</string>
-    <string name="vibe_smooth">Smooth &amp; Flirty</string>
-    <string name="vibe_tease">Playful &amp; Teasing</string>
-    <string name="vibe_chill">Chill &amp; High-EQ</string>
-    <string name="vibe_bold">Direct &amp; Bold</string>
+    <string name="vibe_auto">🧠 Autonomous (AI reads her mood &amp; adapts)</string>
+    <string name="vibe_smooth">🔥 Extra Flirty &amp; Tension</string>
+    <string name="vibe_tease">😏 Extra Playful &amp; Banter</string>
+    <string name="vibe_chill">🎯 Extra High-EQ &amp; Grounded</string>
+    <string name="vibe_bold">⚡ Direct &amp; Bold</string>
 
     <string name="btn_start_service">Launch Floating Wingman</string>
     <string name="btn_stop_service">Stop Floating Wingman</string>
     <string name="btn_save_key">Save Key</string>
+    <string name="btn_test_key">Test &amp; Connect</string>
+    <string name="key_status_testing">Testing connection to Gemini...</string>
+    <string name="key_status_none">Enter your key and tap Test &amp; Connect</string>
 
     <!-- Overlay UI -->
     <string name="overlay_vibe_detected">Vibe Analysis</string>
-    <string name="overlay_analyzing">Analyzing chat subtext...</string>
+    <string name="overlay_analyzing">Analyzing chat subtext &amp; her mood...</string>
     <string name="overlay_tap_to_copy">Tap any reply to copy to clipboard</string>
     <string name="overlay_copied">Copied to clipboard!</string>
     <string name="overlay_capture_now">Scan Screen</string>
