@@ -1,0 +1,36 @@
+<resources>
+    <string name="app_name">Rizz AI</string>
+    <string name="app_tagline">Real-Time Dating &amp; Texting Wingman</string>
+    
+    <!-- Permissions -->
+    <string name="permission_overlay_title">Display Over Other Apps</string>
+    <string name="permission_overlay_desc">Required to show the floating AI bubble and suggestions over WhatsApp, Tinder, Bumble, Instagram, etc.</string>
+    
+    <string name="permission_screen_title">Screen Capture Permission</string>
+    <string name="permission_screen_desc">Allows Rizz AI to visually read the conversation in real time to generate accurate context-aware responses.</string>
+    
+    <string name="permission_a11y_title">Accessibility Service (Optional)</string>
+    <string name="permission_a11y_desc">Enables automatic prompt updates when new messages arrive.</string>
+    
+    <!-- Setup -->
+    <string name="api_key_label">Gemini API Key</string>
+    <string name="api_key_hint">Enter your Google Gemini API Key</string>
+    <string name="api_key_desc">Get your free key at aistudio.google.com</string>
+    
+    <string name="vibe_mode_title">Conversation Persona / Vibe</string>
+    <string name="vibe_smooth">Smooth &amp; Flirty</string>
+    <string name="vibe_tease">Playful &amp; Teasing</string>
+    <string name="vibe_chill">Chill &amp; High-EQ</string>
+    <string name="vibe_bold">Direct &amp; Bold</string>
+
+    <string name="btn_start_service">Launch Floating Wingman</string>
+    <string name="btn_stop_service">Stop Floating Wingman</string>
+    <string name="btn_save_key">Save Key</string>
+
+    <!-- Overlay UI -->
+    <string name="overlay_vibe_detected">Vibe Analysis</string>
+    <string name="overlay_analyzing">Analyzing chat subtext...</string>
+    <string name="overlay_tap_to_copy">Tap any reply to copy to clipboard</string>
+    <string name="overlay_copied">Copied to clipboard!</string>
+    <string name="overlay_capture_now">Scan Screen</string>
+</resources>

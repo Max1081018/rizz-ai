@@ -1,0 +1,17 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="56dp"
+    android:height="56dp"
+    android:viewportWidth="56"
+    android:viewportHeight="56">
+    <!-- Gradient background circle -->
+    <path
+        android:fillColor="#FF2A6D"
+        android:pathData="M28,28m-26,0a26,26 0,1 1,52 0a26,26 0,1 1,-52 0" />
+    <!-- Flame / heart / lightning sparkle silhouette -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M28,14 C25,20 20,22 20,28 C20,32.4 23.6,36 28,36 C32.4,36 36,32.4 36,28 C36,22 31,20 28,14 Z M28,33 C25.8,33 24,31.2 24,29 C24,26.5 26.5,24.2 28,22 C29.5,24.2 32,26.5 32,29 C32,31.2 30.2,33 28,33 Z" />
+    <path
+        android:fillColor="#05D9E8"
+        android:pathData="M38,16 L39,19 L42,20 L39,21 L38,24 L37,21 L34,20 L37,19 Z" />
+</vector>
